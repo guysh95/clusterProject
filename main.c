@@ -20,6 +20,7 @@ void unmoved_build(int *unmoved, int len);
 void mod_max(int *s, bmat *B, group *G, int* unmoved, double *improve, int *indices);
 off_t sizeOfFile(const char* filename);
 
+
 int main(int argc, char* argv[]) {
     FILE *input;
     int dim, *inputRow, i, verK, nnz;
@@ -33,6 +34,8 @@ int main(int argc, char* argv[]) {
         printf("invalid input\n");
         exit(1);
     }
+
+    /**** Reading information from input file into A, verDegrees and M ****/
     input = fopen(argv[1], "r");
     checkFilePtr(input);
     checkFileAccess((int)fread(&dim, sizeof(int), 1, input), 1);
@@ -56,16 +59,19 @@ int main(int argc, char* argv[]) {
     }
     verDegrees -= dim;
     fclose(input);
+    /**** Allocating main G and B ****/
     G = allocate_first(dim);
     B = malloc(sizeof(bmat));
     checkMalloc(B);
     allocate_bmat(A, verDegrees, M, B);
+    /*** Allocating the P and O queues ***/
     P = allocate_queue();
     O = allocate_queue();
-
+    /*** Executing algorithm 3 to find the ideal partition
+     * of the network into community structures ***/
     algorithm3(B, G, inputRow, P, O);
     free(inputRow), free_queue(P), free_bmat(B);
-
+    /*** Writing the partition we got into the output file ***/
     writeToOutput(argv[2], O);
     free_queue(O);
 
@@ -73,7 +79,16 @@ int main(int argc, char* argv[]) {
     printf("%d nodes: application done in %f seconds\n", dim, ((double)(end-start))/CLOCKS_PER_SEC);
     return 0;
 }
-
+/*
+ * This algorithm accepts a modularity matrix B,
+ * a first initialized group G, and pre allocated vector and queues S, P and O.
+ * then we execute algorithm 3 as in:
+ * first we insert G to P, then while P is not empty we pop the first group in P,
+ * find it's ideal partition with power iteration, which is executed in findPartition, and mod_max.
+ * Then we split the current group and insert the two groups we get to P
+ * if they can be partitioned themselves or insert them to O otherwise.
+ * At the end O holds the ideal partition into subgroups of the original G.
+ */
 void algorithm3(bmat *B, group *G, int *S, queue *P, queue *O){
     double *eigenVec, *randVec, *improve;
     int *unmoved, *indices, steps = 0, isEVneg;
@@ -91,6 +106,10 @@ void algorithm3(bmat *B, group *G, int *S, queue *P, queue *O){
         G = pop_queue(P);
         isEVneg = findPartition(B, G, S, eigenVec, randVec); /* algorithm 2 */
         if(!isEVneg)
+            /*
+             * isEVneg == TRUE if the leading eigen value of B[g] is negative
+             * or if the modularity given by B[g] and S is negative.
+             */
             mod_max(S, B, G, unmoved, improve, indices); /* algorithm 4*/
         gPos = malloc(sizeof(group));
         checkMalloc(gPos);
@@ -121,6 +140,10 @@ void algorithm3(bmat *B, group *G, int *S, queue *P, queue *O){
     free(eigenVec), free(randVec);
 }
 
+/*
+ * This function accepts an absolute path to a file and a queue O,
+ * and then writes all of the information about the groups in O to that file.
+ */
 void writeToOutput(char *filename, queue *O){
     FILE *output;
     group *G;
@@ -138,7 +161,10 @@ void writeToOutput(char *filename, queue *O){
 /*
  * algorithm 2
  * accepts bmat B and compute its modularity
- * returns optimal division of g, represented by +1\-1 vector S
+ * returns optimal division of g, represented by +1\-1\0 vector S
+ * 0 values represent indices of vertices that are not in G.
+ * the function return's 1 is the eigenVal computed by the power iteration in negative,
+ * or if the modularity of B[g] with the partiton S is negative.
  */
 int findPartition(bmat* B, group *G, int *S, double *eigenVec, double *randVec){
     double *temp, *goal, eigenVal;
@@ -176,13 +202,20 @@ int findPartition(bmat* B, group *G, int *S, double *eigenVec, double *randVec){
     }
     return 0;
 }
-
+/*
+ * This function reset eigenVec values to 0.0 before the start of the current computation
+ * this is used in findPartition
+ */
 void reset_eigenVec(double* eigenVec, int dim){
     double* ptr;
     for(ptr = eigenVec ; ptr < eigenVec + dim; ptr++)
         *ptr = 0.0;
 }
 
+/*
+ * This function set all of S values that are relevant to G to 1.
+ * The rest of S values are set to 0.
+ */
 void sNoDivision(int *S, int dim, int *members, int *endMem){
     int i;
     for(i = 0; i < dim; i++, S++) {
@@ -199,13 +232,8 @@ void sNoDivision(int *S, int dim, int *members, int *endMem){
     }
 }
 
-void unmoved_build(int *unmoved, int len){
-    int *ptr, *goal = unmoved + len;
-    for(ptr = unmoved; ptr < goal; ptr++)
-        *ptr = 1;
-}
-
-/* the function that optimizes an initial partition of Bhat.
+/*
+ * The function that optimizes an initial partition of Bhat.
  * input: the initial partition s of B, as calculated with power iteration.
  * in the end od the process s is updated to be the optimized partition of G.
  */
@@ -222,7 +250,7 @@ void mod_max(int *s, bmat *B, group *G, int* unmoved, double *improve, int *indi
             exit(1);
         }
         count++;
-        unmoved_build(unmoved, len);
+        unmoved_build(unmoved, len); /* unmoved is a boolean array in the size of G */
         max_imp = -HUGE_VAL;
         for (k = 0; k < len; k++){  /*line 3 in the pseudo code*/
             head = unmoved;
@@ -233,6 +261,8 @@ void mod_max(int *s, bmat *B, group *G, int* unmoved, double *improve, int *indi
                     continue;
                 }
                 s[G->members[i]] = -1 * s[G->members[i]];
+                /* we compute the alteration to the modularity
+                 * directly instead of computing the new modularity */
                 score = modularityAlteration(B, G, s, i);
                 s[G->members[i]] = -1 * s[G->members[i]];
                 if (score > max) {
@@ -244,15 +274,15 @@ void mod_max(int *s, bmat *B, group *G, int* unmoved, double *improve, int *indi
             s[G->members[max_ind]] = -1 * s[G->members[max_ind]];
             indices[k] = max_ind;
             improve[k] = (k == 0) ? max : (improve[k - 1] + max);
-            /*printf("improve[%d]: %f ", k, improve[k]);*/
             unmoved[max_ind] = 0; /* moving vertex in max_ind */
             if (improve[k] > max_imp) {
                 max_imp = improve[k];
                 max_imp_ind = k;
             }
         }
-        /*printf("\nmax is %f\n", max_imp);*/
-        if(max_imp == 0 && improve[len - 1] == 0)
+        /* making sure that if the max improvment to the modularity is 0
+         * then the G is not divided */
+        if(max_imp == 0)
             max_imp_ind = len-1;
 
         for (i = len - 1; i >= max_imp_ind + 1; i--) {
@@ -262,7 +292,19 @@ void mod_max(int *s, bmat *B, group *G, int* unmoved, double *improve, int *indi
         del_q = (max_imp_ind == len - 1) ? 0 : improve[max_imp_ind];
     }
 }
+/*
+ * This function set all of the pre-allocated unmoved vector values to 1.
+ */
+void unmoved_build(int *unmoved, int len){
+    int *ptr, *goal = unmoved + len;
+    for(ptr = unmoved; ptr < goal; ptr++)
+        *ptr = 1;
+}
 
+/*
+ * This function accepts an absolute path to a file and returns the file's size in bytes,
+ * using sys/stat.h library.
+ */
 off_t sizeOfFile(const char* filename){
     struct stat st;
     if(stat(filename, &st) == 0)
@@ -270,4 +312,3 @@ off_t sizeOfFile(const char* filename){
     printf("can't compute file size\n");
     exit(1);
 }
-
