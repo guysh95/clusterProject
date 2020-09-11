@@ -1,7 +1,3 @@
-/*
-* Created by litalsol on 16/08/2020. Guy if you're reading this know that you're fat.
-*/
-
 #include "g.h"
 #include<stdlib.h>
 #include<stdio.h>
@@ -34,8 +30,6 @@ group* allocate_first(int size){
  * version change: instead of allocating new memory for g1 and g2 vertex
  * we reuse the memory allocated to g vertex
  */
-
-
 void split(group *g, int *S, group *gPos, group *gNeg){
     int numPos = 0, numNeg = 0;
     int *memPos, *memNeg, *tempPos, *tempNeg, *tempG;

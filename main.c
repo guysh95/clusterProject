@@ -13,7 +13,7 @@
 
 void algorithm3(bmat *B, group *G, int *S, queue *P, queue *O);
 void writeToOutput(char *filename, queue *O);
-void findPartition(bmat* B, group *G, int *S, double *eigenVec, double *randVec);
+int findPartition(bmat* B, group *G, int *S, double *eigenVec, double *randVec);
 void sNoDivision(int *S, int dim, int *members, int *endMem);
 void reset_eigenVec(double* eigenVec, int dim);
 void unmoved_build(int *unmoved, int len);
@@ -76,7 +76,7 @@ int main(int argc, char* argv[]) {
 
 void algorithm3(bmat *B, group *G, int *S, queue *P, queue *O){
     double *eigenVec, *randVec, *improve;
-    int *unmoved, *indices;
+    int *unmoved, *indices, steps = 0, isEVneg;
     group *gPos, *gNeg;
     eigenVec = malloc(B->dim * sizeof(double));
     checkMalloc(eigenVec);
@@ -87,9 +87,11 @@ void algorithm3(bmat *B, group *G, int *S, queue *P, queue *O){
     indices = unmoved + B->dim;
     insert_queue(P, G);
     while(!isEmpty(P)){
+        steps++;
         G = pop_queue(P);
-        findPartition(B, G, S, eigenVec, randVec); /* algorithm 2 */
-        mod_max(S, B, G, unmoved, improve, indices); /* algorithm 4*/
+        isEVneg = findPartition(B, G, S, eigenVec, randVec); /* algorithm 2 */
+        if(!isEVneg)
+            mod_max(S, B, G, unmoved, improve, indices); /* algorithm 4*/
         gPos = malloc(sizeof(group));
         checkMalloc(gPos);
         gNeg = malloc(sizeof(group));
@@ -138,7 +140,7 @@ void writeToOutput(char *filename, queue *O){
  * accepts bmat B and compute its modularity
  * returns optimal division of g, represented by +1\-1 vector S
  */
-void findPartition(bmat* B, group *G, int *S, double *eigenVec, double *randVec){
+int findPartition(bmat* B, group *G, int *S, double *eigenVec, double *randVec){
     double *temp, *goal, eigenVal;
     int *members = G->members, *endMem = members + G->size;
     int dim, i;
@@ -150,7 +152,7 @@ void findPartition(bmat* B, group *G, int *S, double *eigenVec, double *randVec)
     if(eigenVal <= ZERO){
         /* g is indivisible */
         sNoDivision(S, dim, members, endMem);
-        return;
+        return 1;
     }
     /* calculating s */
     goal = eigenVec + dim; /* goal is pointer instead of using index */
@@ -161,7 +163,7 @@ void findPartition(bmat* B, group *G, int *S, double *eigenVec, double *randVec)
             if (i != *members)
                 *S = 0;
             else{
-                *S = *temp > 0 ? 1 : -1;
+                *S = *temp > ZERO ? 1 : -1;
                 members++;
             }
         }
@@ -170,7 +172,9 @@ void findPartition(bmat* B, group *G, int *S, double *eigenVec, double *randVec)
     if(computeModularity(B, G, S, randVec) <= ZERO){
         /* g is indivisible */
         sNoDivision(S, dim, members, endMem);
+        return 1;
     }
+    return 0;
 }
 
 void reset_eigenVec(double* eigenVec, int dim){
@@ -208,11 +212,16 @@ void unmoved_build(int *unmoved, int len){
 void mod_max(int *s, bmat *B, group *G, int* unmoved, double *improve, int *indices){
     int len;
     int *head;
-    int i, j, k, max_ind, max_imp_ind;
+    int i, j, k, max_ind, max_imp_ind, count = 0, limit = 3000 * B->dim;
     double del_q, score, max, max_imp;
     len = G->size;
     del_q = 1;
     while (del_q > ZERO) {
+        if(count > limit){
+            printf("aborted due to suspicion of infinite loop\n");
+            exit(1);
+        }
+        count++;
         unmoved_build(unmoved, len);
         max_imp = -HUGE_VAL;
         for (k = 0; k < len; k++){  /*line 3 in the pseudo code*/
@@ -235,12 +244,14 @@ void mod_max(int *s, bmat *B, group *G, int* unmoved, double *improve, int *indi
             s[G->members[max_ind]] = -1 * s[G->members[max_ind]];
             indices[k] = max_ind;
             improve[k] = (k == 0) ? max : (improve[k - 1] + max);
+            /*printf("improve[%d]: %f ", k, improve[k]);*/
             unmoved[max_ind] = 0; /* moving vertex in max_ind */
             if (improve[k] > max_imp) {
                 max_imp = improve[k];
                 max_imp_ind = k;
             }
         }
+        /*printf("\nmax is %f\n", max_imp);*/
         if(max_imp == 0 && improve[len - 1] == 0)
             max_imp_ind = len-1;
 

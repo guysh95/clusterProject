@@ -1,12 +1,5 @@
-/*
- * spmat.c
- *
- *  Created on: May 13, 2020
- *      Author: Guy Shnaider
- */
 #include "spmat.h"
 #include<stdlib.h>
-#include <stddef.h>
 #include"checkError.h"
 #include "g.h"
 

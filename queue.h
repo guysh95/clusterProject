@@ -1,9 +1,8 @@
-/*
-* Created by guy on 05/09/2020.
-*/
 #ifndef UPGRADECLUSTER_QUEUE_H
 #define UPGRADECLUSTER_QUEUE_H
 #include "g.h"
+
+
 /*an item in queue*/
 typedef struct item{
     group *data;
