@@ -189,7 +189,7 @@ int findPartition(bmat* B, group *G, int *S, double *eigenVec, double *randVec){
             if (i != *members)
                 *S = 0;
             else{
-                *S = *temp > 0 ? 1 : -1;
+                *S = *temp > ZERO ? 1 : -1;
                 members++;
             }
         }
