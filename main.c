@@ -29,12 +29,10 @@ int main(int argc, char* argv[]) {
     group *G;
     bmat *B;
     queue *P, *O;
-    clock_t start = clock(), end;
     if(argc != 3){
         printf("invalid input\n");
         exit(1);
     }
-
     /**** Reading information from input file into A, verDegrees and M ****/
     input = fopen(argv[1], "r");
     checkFilePtr(input);
@@ -75,10 +73,9 @@ int main(int argc, char* argv[]) {
     writeToOutput(argv[2], O);
     free_queue(O);
 
-    end = clock();
-    printf("%d nodes: application done in %f seconds\n", dim, ((double)(end-start))/CLOCKS_PER_SEC);
     return 0;
 }
+
 /*
  * This algorithm accepts a modularity matrix B,
  * a first initialized group G, and pre allocated vector and queues S, P and O.
@@ -189,7 +186,7 @@ int findPartition(bmat* B, group *G, int *S, double *eigenVec, double *randVec){
             if (i != *members)
                 *S = 0;
             else{
-                *S = *temp > ZERO ? 1 : -1;
+                *S = *temp > 0 ? 1 : -1;
                 members++;
             }
         }
